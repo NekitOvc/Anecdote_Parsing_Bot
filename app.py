@@ -1,52 +1,67 @@
-from aiogram import Bot, Dispatcher, executor, types
+# -*- coding: utf-8 -*-
+import os
+import asyncio
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters.command import Command
 from config import AllConfigurations
-from parser_url import parser, list_of_jokes
+from logger import setup_logging
+from parser_url import list_of_jokes
 from connect_db import db_connection, new_user, table_of_jokes, record_responce
 
-import logging
+load_dotenv(".env.local")
+TOKEN = os.getenv("TOKEN")
 
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-# инициализация бота
-bot = Bot(token=AllConfigurations.TOKEN)
-dp = Dispatcher(bot)
+logger = setup_logging()
 
-# логирование в файл py_log.log в режиме перезаписи при каждом запуске бота с указанием времени
-logging.basicConfig(level=logging.INFO, filename='py_log.log', filemode='w', format='%(asctime)s %(levelname)s %(message)s')
-
-
-# обработка команды /start
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    logging.info(f'Пользователь {message.from_user.full_name} активировал бота')
+@dp.message(Command("start"))
+async def command_start(message: types.Message):
+    """Обработка команды /start"""
+    logger.info(f"Пользователь {message.from_user.full_name} активировал бота")
     await bot.send_message(message.from_user.id, AllConfigurations.welcome_text)
-    logging.info(f'Бот отправил приветственное сообщение пользователю {message.from_user.full_name}')
+    logger.info(f"Бот отправил приветственное сообщение пользователю {message.from_user.full_name}")
     await db_connection()
     await new_user(user_id=message.from_user.id, user_name=message.from_user.full_name)
     await table_of_jokes()
 
-
-# обработка команды /go
-@dp.message_handler(commands=['go'])
+@dp.message(Command("go"))
 async def command_go(message: types.Message):
-    logging.info(f'Пользователь {message.from_user.full_name} активировал команду /go')
+    """Обработка команды /go"""
+    logger.info(f"Пользователь {message.from_user.full_name} активировал команду /go")
     await bot.send_message(message.from_user.id, AllConfigurations.command_go)
-    logging.info(f'Бот отправил ответ пользователю {message.from_user.full_name}')
+    logger.info(f"Бот отправил ответ пользователю {message.from_user.full_name}")
 
-@dp.message_handler(content_types=['text'])
+@dp.message()
 async def get_a_joke(message: types.Message):
-    logging.info(f'Пользователь {message.from_user.full_name} ввёл сообщение {message.text}')
-    # текст переводится в нижний регистр. Если пользователь вводит любую цифру
-    if message.text.lower() in '1234567890':
-        # отображается анекдот
-        await bot.send_message(message.from_user.id, list_of_jokes[0])
-        # анекдот вносится в БД
-        await record_responce(column=[list_of_jokes[0]])
-        # после выбора пользователя анекдот удаляется из списка, чтобы в следующий раз он не повторился
-        del list_of_jokes[0]
+    """Функция получения анекдота"""
+    logger.info(f"Пользователь {message.from_user.full_name} ввёл сообщение {message.text}")
+
+    if message.text.isdigit() and int(message.text) in range(1, 10):
+        if list_of_jokes:
+            joke = list_of_jokes.pop(0)
+            await bot.send_message(message.from_user.id, joke)
+            await record_responce([joke])
+        else:
+            await bot.send_message(message.from_user.id, "Анекдоты закончились.")
     else:
-        # иначе отображается текст
         await bot.send_message(message.from_user.id, AllConfigurations.error_text)
 
+async def start_polling():
+    try:
+        print("Осуществлён запуск бота")
+        logger.info("Осуществлён запуск бота")
+        await dp.start_polling(bot)
+    except asyncio.CancelledError:
+        print("Polling был отменен.")
+        logger.warning("Polling был отменен.")
+    except KeyboardInterrupt:
+        print("Бот остановлен.")
+        logger.warning("Бот остановлен.")
+    finally:
+        await bot.session.close()
 
-# бот не отвечает на сообщения, которые были отправлены, когда бот был оффлайн
-executor.start_polling(dp, skip_updates=True)
+if __name__ == "__main__":
+    asyncio.run(start_polling())
