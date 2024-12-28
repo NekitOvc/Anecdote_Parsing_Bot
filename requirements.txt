@@ -1,0 +1,6 @@
+aiogram
+aiosqlite
+emoji
+requests
+beautifulsoup4
+python-dotenv
