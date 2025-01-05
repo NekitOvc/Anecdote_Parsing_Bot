@@ -51,8 +51,7 @@ async def record_responce(column):
     try:
         async with aiosqlite.connect("db.db") as connection:
             cursor = await connection.cursor()
-            # Убедитесь, что column - это строка
-            await cursor.execute("INSERT INTO anecdotes VALUES(?)", (column[0],))  # Используем первый элемент списка
+            await cursor.execute("INSERT INTO anecdotes VALUES(?)", (column[0],))
             await connection.commit()
             logger.info("Анекдот внесён в БД")
     except Exception as e:
